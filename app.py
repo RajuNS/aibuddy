@@ -1,50 +1,33 @@
-from flask import Flask, render_template, request, jsonify, session
-import google.generativeai as genai
+from flask import Flask, render_template, request, jsonify
+from google import genai
+import os
 
+# Initialize Flask app
 app = Flask(__name__)
-app.secret_key = "AIzaSyA86DrqeNL9D-Fvd6ghIJsHlt5k1MrYnKM"  # Change this to a strong secret key
 
-# Initialize Gemini AI Client
-genai.configure(api_key="AIzaSyA86DrqeNL9D-Fvd6ghIJsHlt5k1MrYnKM")  # Replace with your actual API key
-model = genai.GenerativeModel("gemini-pro")  # Ensure the correct model is used
+# Set your API key (replace with your actual API key)
+API_KEY = "AIzaSyA86DrqeNL9D-Fvd6ghIJsHlt5k1MrYnKM"  # Get it from https://ai.google.dev
+client = genai.Client(api_key=API_KEY)
 
-def get_gemini_response(prompt, history):
-    """Generate AI response while handling empty outputs properly."""
-    
-    full_prompt = "\n".join(history + [prompt])  # Maintain history properly
+# Load the latest Gemini model
+model = "gemini-2.0-flash"  # Use "gemini-1.5-pro" for more advanced responses
 
+def get_gemini_response(prompt):
+    """Generate AI response using Google Gemini API."""
     try:
-        response = model.generate_content(full_prompt)
-
-        if response.text:  # Ensure valid response exists
-            formatted_response = response.text.replace("**", "").strip()  
-            return formatted_response  # Preserve new lines
-        else:
-            return "Sorry, I can't generate a response for this input."
-
+        response = client.models.generate_content(model=model, contents=prompt)
+        return response.text if response and hasattr(response, "text") else "Sorry, I couldn't generate a response."
     except Exception as e:
         return f"Error: {str(e)}"
 
-@app.route("/", methods=['POST', 'GET'])
+@app.route("/", methods=['GET', 'POST'])
 def chatbot():
-    if 'history' not in session:
-        session['history'] = []  # Initialize chat history
-
     if request.method == 'POST':
-        prompt = request.form['prompt'].strip()
-
-        if not prompt:  # Ignore empty inputs
+        prompt = request.form.get("prompt", "").strip()
+        if not prompt:
             return jsonify({'response': "Please enter a message."})
 
-        history = session['history'][-5:]  # Limit chat history to prevent bloating
-        
-        response = get_gemini_response(prompt, history)
-
-        # Append user prompt and response separately to maintain order
-        session['history'].append(f"User: {prompt}")
-        session['history'].append(f"Bot: {response}")
-
-        session.modified = True  # Mark session as modified
+        response = get_gemini_response(prompt)
         return jsonify({'response': response})
 
     return render_template('index.html')
